@@ -4,9 +4,9 @@
 
 **A skill pack for everyday engineering workflows**
 
-Code authoring · repo review · project reproduction · publish gate · shell & script hardening · device debugging · cloud docs API · document audit · deliverable packs
+Code authoring · repo review · project reproduction · publish gate · shell & script hardening · device debugging · cloud docs API · document audit · deliverable packs · M2 camera tuning
 
-[![Skills](https://img.shields.io/badge/skills-10-2f81f7?style=flat-square)](#skills)
+[![Skills](https://img.shields.io/badge/skills-11-2f81f7?style=flat-square)](#skills)
 [![Format](https://img.shields.io/badge/skills-plain%20markdown-8b5cf6?style=flat-square)](#skills)
 [![Standard](https://img.shields.io/badge/Agent%20Skills-open%20format-0ea5e9?style=flat-square)](https://agentskills.io)
 [![License](https://img.shields.io/badge/license-MIT-16a34a?style=flat-square)](#license)
@@ -14,7 +14,7 @@ Code authoring · repo review · project reproduction · publish gate · shell &
 </div>
 
 > Repetitive work that still needs judgement, distilled into skills an AI agent can load and execute.
-> Every skill is **a single self-contained `SKILL.md`**: trigger conditions, an executable procedure, verified gotchas, and an acceptance checklist. No dependencies, no hidden assets — copy the folder into your agent's skill directory and it works.
+> Every skill is **a self-contained `SKILL.md`**: trigger conditions, an executable procedure, verified gotchas, and an acceptance checklist. Where the code itself is the deliverable, the skill carries a `scripts/` folder beside it; otherwise it is one file. No hidden assets, no build step — copy the folder into your agent's skill directory and it works.
 
 ---
 
@@ -36,6 +36,7 @@ Code authoring · repo review · project reproduction · publish gate · shell &
 | 📄 | [feishu-docs-api](#feishu-api) |
 | 📐 | [doc-consistency-audit](#doc-audit) |
 | 🗃️ | [deliverable-pack](#deliverable) |
+| 🎥 | [m2-camera-fps](#camera) |
 | ⚡ | [Quick Start](#quickstart) |
 | 🗂️ | [Repository Layout](#layout) |
 | 📐 | [Conventions](#conventions) |
@@ -59,6 +60,7 @@ Code authoring · repo review · project reproduction · publish gate · shell &
 | 📄 **Cloud docs API** | `feishu-docs-api`<br>`v0.1.0` | Drive Feishu/Lark docs over REST: block editing, markdown publishing, wiki archiving, permissions | "edit this Feishu doc", "sync this markdown up" |
 | 📐 **Document audit** | `doc-consistency-audit`<br>`v0.1.0` | Consistency audit for a doc set or multilingual tree, with a severity-graded report | "audit this batch of documents" |
 | 🗃️ **Deliverable pack** | `deliverable-pack`<br>`v0.1.0` | Turn one-off work into a five-part reviewable pack | any work that must be handed over |
+| 🎥 **M2 camera tuning** | `m2-camera-fps`<br>`v0.1.0` | Register-level frame-rate gain on Quectel Pi M2 + IMX219 (22.64 → 36.42 fps, no kernel rebuild), plus honest fps measurement, hardware recording, smooth zoom, LSC and SSH-tunneled preview | "camera frame rate is too low", "measure the real fps", "M2 camera I2C / GStreamer fails" |
 
 ---
 
@@ -71,7 +73,7 @@ write → review → reproduce → publish → hand over
 code-authoring → github-repo-review-and-design → project-reproduction → prepublish-repo-audit → deliverable-pack
 ```
 
-Peripheral but load-bearing: `windows-shell-tooling` and `shell-script-hardening` (environment and scripts), `adb-device-toolkit` (devices), `feishu-docs-api` and `doc-consistency-audit` (documents).
+Peripheral but load-bearing: `windows-shell-tooling` and `shell-script-hardening` (environment and scripts), `adb-device-toolkit` (devices), `m2-camera-fps` (camera hardware), `feishu-docs-api` and `doc-consistency-audit` (documents).
 
 ---
 
@@ -237,6 +239,21 @@ define scope + mirror pairs ─► mechanical scan (structure / links / code blo
 
 **Discipline**: conclusions first; keep the log separate from the overview; every conclusion verifiable; relative paths inside the pack; timestamped directories.
 
+<a id="camera"></a>
+
+### 🎥 11. m2-camera-fps
+
+**Focus**: on an M2 + IMX219 the frame rate is decided by the sensor's own timing registers, not by the driver — writing `VTS` / `EXPO` over I2C **while the stream is running** takes 22.64 → 36.42 fps with no kernel rebuild. `HTS` stays untouched: squeezing it makes the numbers look better and the picture worse.
+
+| | Content |
+|:--|:--|
+| ✅ Core result | `fps = pixel_rate / (HTS × VTS)`; `VTS=1096` + `EXPO=640` → **36.42 fps (+60.9 %)**; stopping the stream restores factory values |
+| ⛔ Real limit | VTS only sets the ceiling — exposure decides the actual rate, and AE pins a VTS-only change at ~25 fps |
+| 🧪 Measurement discipline | warm up before timing; median inter-frame interval from a pad probe, never the container's nominal rate; pull a frame after every timing change |
+| 📦 Ships with | `scripts/`: register read/write, mid-stream fps probe, `mpph264enc` recording, smooth zoom + box follow, LSC calibration and corrected MJPEG preview |
+
+**Also covers**: hardware H.264 recording with wall-clock PTS, software-only smooth zoom (hardware `VIDIOC_S_CROP` is a stream-start parameter), the LSC-before-white-balance ordering, and MJPEG preview over a PC-side SSH tunnel with measured bandwidth (720p q85 = 30 Mbps).
+
 ---
 
 <a id="quickstart"></a>
@@ -256,7 +273,7 @@ hermes skills tap add jjking619/QPi-Skills
 hermes skills install jjking619/QPi-Skills/project-reproduction
 ```
 
-- **No dependencies**: each skill is a plain markdown file; commands run at the moment they're needed.
+- **No build step**: each skill is a plain markdown file — one of them adds a `scripts/` folder of ready-to-run Python; commands run at the moment they're needed.
 - **How skills load**: your agent reads the `description` in each `SKILL.md` frontmatter (trigger keywords) to decide relevance; how to load one explicitly differs per client — see its docs.
 - **Adapt to your environment**: output directories mentioned in a skill (report or audit paths) are plain text — edit the constant in `SKILL.md` to match your habits.
 
@@ -281,7 +298,8 @@ QPi-Skills/
     ├── adb-device-toolkit/
     ├── feishu-docs-api/
     ├── doc-consistency-audit/
-    └── deliverable-pack/
+    ├── deliverable-pack/
+    └── m2-camera-fps/                # SKILL.md + SKILL.zh.md + scripts/ (the code is the deliverable)
 ```
 
 The layout follows the Agent Skills tap convention (`skills/<skill-name>/SKILL.md`), so the tree can be copied wholesale without renaming anything.
@@ -290,7 +308,7 @@ The layout follows the Agent Skills tap convention (`skills/<skill-name>/SKILL.m
 
 ## Conventions
 
-- **Single file per skill**: the procedure, the gotchas, and the acceptance checklist live together, so a skill never breaks on a missing companion file.
+- **One `SKILL.md` per skill**: the procedure, the gotchas, and the acceptance checklist live together, so a skill never breaks on a missing companion file. A `scripts/` folder is allowed only where the code itself is the deliverable (`m2-camera-fps` today), and the `SKILL.md` still stands on its own without it.
 - **Intent-shaped triggers**: descriptions use neutral intent ("reproduce per the tutorial"), not one conversation's phrasing.
 - **Verifiable conclusions**: review findings carry `file:line`, reproduction steps carry commands and real output, API claims carry endpoints and error codes.
 - **Fixes are permanent**: a one-off command is not a delivery — the change belongs in a file.

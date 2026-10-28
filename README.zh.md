@@ -4,9 +4,9 @@
 
 **面向日常工作流的技能集**
 
-代码编写 · 仓库审查 · 项目复现 · 发布门禁 · Shell 与脚本健壮化 · 设备联调 · 云文档 API · 文档审计 · 交付物包
+代码编写 · 仓库审查 · 项目复现 · 发布门禁 · Shell 与脚本健壮化 · 设备联调 · 云文档 API · 文档审计 · 交付物包 · M2 摄像头调优
 
-[![Skills](https://img.shields.io/badge/skills-10-2f81f7?style=flat-square)](#skills)
+[![Skills](https://img.shields.io/badge/skills-11-2f81f7?style=flat-square)](#skills)
 [![Format](https://img.shields.io/badge/skills-plain%20markdown-8b5cf6?style=flat-square)](#skills)
 [![Standard](https://img.shields.io/badge/Agent%20Skills-open%20format-0ea5e9?style=flat-square)](https://agentskills.io)
 [![License](https://img.shields.io/badge/license-MIT-16a34a?style=flat-square)](#license)
@@ -14,7 +14,7 @@
 </div>
 
 > 把日常里**重复且有判断力**的活儿，沉淀成 AI Agent 可直接加载执行的技能。
-> 每个技能都是**自包含的单文件 `SKILL.md`**：触发条件、可执行流程、实测坑、验收清单写在一起 —— 没有依赖、没有隐藏资产，复制进 Agent 的技能目录即可使用。
+> 每个技能都是**自包含的 `SKILL.md`**：触发条件、可执行流程、实测坑、验收清单写在一起。当代码本身就是交付物时，技能目录里另带一个 `scripts/`；其余技能仍是单文件。没有隐藏资产、没有构建步骤，复制进 Agent 的技能目录即可使用。
 
 ---
 
@@ -36,6 +36,7 @@
 | 📄 | [feishu-docs-api 云文档 API](#feishu-api) |
 | 📐 | [doc-consistency-audit 文档一致性审计](#doc-audit) |
 | 🗃️ | [deliverable-pack 交付物包](#deliverable) |
+| 🎥 | [m2-camera-fps M2 摄像头帧率调优](#camera) |
 | ⚡ | [快速开始](#quickstart) |
 | 🗂️ | [仓库结构](#layout) |
 | 📐 | [设计约定](#conventions) |
@@ -58,7 +59,8 @@
 | 📱 **设备联调** | `adb-device-toolkit`<br>`v0.1.0` | **adb** 认设备、执行身份、传文件校验、长任务脱离会话 | 连板子 / Android 设备调试 |
 | 📄 **云文档 API** | `feishu-docs-api`<br>`v0.1.0` | REST 直写 / 同步 / 归档飞书云文档（docx / wiki / bitable） | 「改这篇飞书文档」「把 md 同步上云」 |
 | 📐 **文档一致性审计** | `doc-consistency-audit`<br>`v0.1.0` | 一批文档 / 多语言镜像的**一致性检查 + 分级报告** | 「这批文档审一遍」 |
-| 🗃️ **交付物包** | `deliverable-pack`<br>`v0.1.0` | 把一次性工作沉淀成**可复核的五件套** | 复现 / 迁移 / 调研做完要交接 |
+| 🗃️ **交付物包** | `deliverable-pack`<br>`v0.1.0` | 同一件事有三类读者（决策者 / 执行者 / 复核者），用固定五件套一次满足 | 任何需要交付的工作 |
+| 🎥 **M2 摄像头调优** | `m2-camera-fps`<br>`v0.1.0` | M2 + IMX219 的**寄存器级帧率提升**（22.64 → 36.42 fps，不重编内核），含实测帧率、硬编录制、平滑变焦、LSC 校正与 SSH 隧道预览 | 「帧率太低」「实测真实帧率」「M2 相机 I2C / GStreamer 不通」 |
 
 ---
 
@@ -71,7 +73,7 @@
 code-authoring → github-repo-review-and-design → project-reproduction → prepublish-repo-audit → deliverable-pack
 ```
 
-周边但常用：`windows-shell-tooling` 与 `shell-script-hardening`（环境与脚本）、`adb-device-toolkit`（设备）、`feishu-docs-api` 与 `doc-consistency-audit`（文档）。
+周边但常用：`windows-shell-tooling` 与 `shell-script-hardening`（环境与脚本）、`adb-device-toolkit`（设备）、`m2-camera-fps`（相机硬件）、`feishu-docs-api` 与 `doc-consistency-audit`（文档）。
 
 ---
 
@@ -233,6 +235,21 @@ P0 准备 ─► P1 按原文逐步执行（忠实原文，偏差记为「文档
 
 **纪律**：结论先行；日志与总览分开；每条结论可复核；包内引用用相对路径；目录名带时间戳。
 
+<a id="camera"></a>
+
+### 🎥 11. m2-camera-fps —— M2 摄像头帧率调优
+
+**定位**：M2 + IMX219 的帧率由传感器自己的时序寄存器决定，不是驱动定的 —— 出流期间通过 I2C 写 `VTS` / `EXPO` 把 22.64 fps 提到 **36.42 fps**，不重编内核；`HTS` 必须保持不动（压它会让数字好看、画面坏掉）。
+
+| | 内容 |
+|:--|:--|
+| ✅ 核心结论 | `fps = pixel_rate / (HTS × VTS)`；`VTS=1096` + `EXPO=640` → **36.42 fps（+60.9%）**；停流后驱动自动恢复出厂值 |
+| ⛔ 真实限制 | VTS 只是上限，曝光才决定实际帧率 —— 只改 VTS 会被 AE 锁在 ~25 fps |
+| 🧪 测量纪律 | 先预热再计时；帧率用 pad probe 的中位帧间隔，不信容器标称；改完时序必须抽帧看画面 |
+| 📦 附带脚本 | `scripts/`：寄存器读写、流中测帧率、`mpph264enc` 录制、平滑变焦 + 框跟随、LSC 标定与校正后 MJPEG 预览 |
+
+**另含**：墙钟 PTS 的硬件 H.264 录制、纯软件平滑变焦（硬件 `VIDIOC_S_CROP` 是开流参数）、「白平衡必须在 LSC 之后」的次序，以及 PC 端 SSH 隧道看流与实测带宽（720p 质量 85 = 30 Mbps）。
+
 ---
 
 <a id="quickstart"></a>
@@ -252,7 +269,7 @@ hermes skills tap add jjking619/QPi-Skills
 hermes skills install jjking619/QPi-Skills/project-reproduction
 ```
 
-- **无需安装依赖**：技能是纯 Markdown，命令按需在运行时执行。
+- **无需构建**：技能主体是纯 Markdown（其中一个另带可直接运行的 Python `scripts/`），命令按需在运行时执行。
 - **如何被加载**：Agent 依据每个 `SKILL.md` frontmatter 的 `description`（含触发词）判断是否加载；显式加载方式随客户端而异，见所使客户端的文档。
 - **改回自己的环境**：技能里出现的产出目录（复现报告、审计报告等落盘路径）按自己习惯改 `SKILL.md` 里的路径常量即可。
 
@@ -277,7 +294,8 @@ QPi-Skills/
     ├── adb-device-toolkit/
     ├── feishu-docs-api/
     ├── doc-consistency-audit/
-    └── deliverable-pack/
+    ├── deliverable-pack/
+    └── m2-camera-fps/                # SKILL.md + SKILL.zh.md + scripts/（代码即交付物）
 ```
 
 目录层级符合 Agent Skills 的 tap 约定（`skills/<技能名>/SKILL.md`），可**整树复制**，无需改名或调整结构。
@@ -286,7 +304,7 @@ QPi-Skills/
 
 ## 设计约定（Conventions）
 
-- **单文件自包含**：流程、坑位、验收清单写在一个 `SKILL.md` 里，不依赖任何附属文件，技能不会因为缺文件而失效。
+- **一个技能一个 `SKILL.md`**：流程、坑位、验收清单写在一起，技能不会因为缺文件而失效。仅当代码本身就是交付物时允许另带 `scripts/`（目前只有 `m2-camera-fps`），且 `SKILL.md` 即使没有脚本也要能独立读得通。
 - **触发词面向意图**：描述用中性意图表述，换个人、换个项目依然能命中。
 - **结论必须可复核**：审查条目带 `文件:行`，复现步骤带命令与实际输出，API 断言带端点与错误码。
 - **修复要固化**：临时命令不算交付，改动必须落进文件本身。
